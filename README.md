@@ -1,4 +1,6 @@
 [![Build Status](https://travis-ci.org/jwtk/jjwt.svg?branch=master)](https://travis-ci.org/jwtk/jjwt)
+
+[![Git](https://app.soluble.cloud/api/v1/public/badges/2a276f0f-aeec-4f68-aa66-0257c78631b0.svg?orgId=320408544746)](https://app.soluble.cloud/repos/details/github.com/jsoehner/jjwt?orgId=320408544746)  
 [![Coverage Status](https://coveralls.io/repos/github/jwtk/jjwt/badge.svg?branch=master)](https://coveralls.io/github/jwtk/jjwt?branch=master)
 [![Gitter](https://badges.gitter.im/jwtk/jjwt.svg)](https://gitter.im/jwtk/jjwt?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
