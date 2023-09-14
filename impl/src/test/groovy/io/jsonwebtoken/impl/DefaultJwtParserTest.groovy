@@ -19,16 +19,19 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.MalformedJwtException
 import io.jsonwebtoken.SignatureAlgorithm
-import io.jsonwebtoken.io.*
+import io.jsonwebtoken.impl.lang.Bytes
+import io.jsonwebtoken.io.DeserializationException
+import io.jsonwebtoken.io.Deserializer
+import io.jsonwebtoken.io.Encoders
 import io.jsonwebtoken.lang.Strings
 import io.jsonwebtoken.security.Keys
 import org.junit.Test
 
 import javax.crypto.Mac
 import javax.crypto.SecretKey
+import java.nio.charset.StandardCharsets
 
-import static org.junit.Assert.assertEquals
-import static org.junit.Assert.assertSame
+import static org.junit.Assert.*
 
 // NOTE to the casual reader: even though this test class appears mostly empty, the DefaultJwtParser
 // implementation is tested to 100% coverage.  The vast majority of its tests are in the JwtsTest class.  This class
@@ -36,28 +39,18 @@ import static org.junit.Assert.assertSame
 
 class DefaultJwtParserTest {
 
+    // all whitespace chars as defined by Character.isWhitespace:
+    static final String WHITESPACE_STR = ' \u0020 \u2028 \u2029 \t \n \u000B \f \r \u001C \u001D \u001E \u001F '
+
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    @Test(expected = IllegalArgumentException)
-    void testBase64UrlDecodeWithNullArgument() {
-        new DefaultJwtParser().base64UrlDecodeWith(null)
+    private DefaultJwtParser newParser() {
+        return Jwts.parser().build() as DefaultJwtParser
     }
 
-    @Test
-    void testBase64UrlEncodeWithCustomDecoder() {
-        def decoder = new Decoder() {
-            @Override
-            Object decode(Object o) throws DecodingException {
-                return null
-            }
-        }
-        def b = new DefaultJwtParser().base64UrlDecodeWith(decoder)
-        assertSame decoder, b.base64UrlDecoder
-    }
-
-    @Test(expected = IllegalArgumentException)
-    void testDeserializeJsonWithNullArgument() {
-        new DefaultJwtParser().deserializeJsonWith(null)
+    @Test(expected = MalformedJwtException)
+    void testBase64UrlDecodeWithInvalidInput() {
+        newParser().decode('20:SLDKJF;3993;----', 'test')
     }
 
     @Test
@@ -68,14 +61,16 @@ class DefaultJwtParserTest {
                 return OBJECT_MAPPER.readValue(bytes, Map.class)
             }
         }
-        def p = new DefaultJwtParser().deserializeJsonWith(deserializer)
-        assertSame deserializer, p.deserializer
+        def pb = Jwts.parser().deserializeJsonWith(deserializer)
+        def p = pb.build() as DefaultJwtParser
+        assertTrue("Expected wrapping deserializer to be instance of JwtDeserializer", p.deserializer instanceof JwtDeserializer )
+        assertSame deserializer, p.deserializer.deserializer
 
-        def key = Keys.secretKeyFor(SignatureAlgorithm.HS256)
+        def key = Jwts.SIG.HS256.key().build()
 
-        String jws = Jwts.builder().claim('foo', 'bar').signWith(key, SignatureAlgorithm.HS256).compact()
+        String jws = Jwts.builder().claim('foo', 'bar').signWith(key, Jwts.SIG.HS256).compact()
 
-        assertEquals 'bar', p.setSigningKey(key).parseClaimsJws(jws).getBody().get('foo')
+        assertEquals 'bar', pb.verifyWith(key).build().parseClaimsJws(jws).getPayload().get('foo')
     }
 
     @Test(expected = MalformedJwtException)
@@ -93,7 +88,7 @@ class DefaultJwtParserTest {
 
         String invalidJws = compact + encodedSignature
 
-        new DefaultJwtParser().setSigningKey(key).parseClaimsJws(invalidJws)
+        Jwts.parser().verifyWith(key).build().parseClaimsJws(invalidJws)
     }
 
     @Test(expected = MalformedJwtException)
@@ -111,7 +106,7 @@ class DefaultJwtParserTest {
 
         String invalidJws = compact + encodedSignature
 
-        new DefaultJwtParser().setSigningKey(key).parseClaimsJws(invalidJws)
+        Jwts.parser().verifyWith(key).build().parseClaimsJwe(invalidJws)
     }
 
     @Test(expected = MalformedJwtException)
@@ -129,6 +124,57 @@ class DefaultJwtParserTest {
 
         String invalidJws = compact + encodedSignature
 
-        new DefaultJwtParser().setSigningKey(key).parseClaimsJws(invalidJws)
+        Jwts.parser().verifyWith(key).build().parseClaimsJws(invalidJws)
+    }
+
+    @Test
+    void testIsLikelyJsonWithEmptyString() {
+        assertFalse DefaultJwtParser.isLikelyJson(''.getBytes(StandardCharsets.UTF_8))
+    }
+
+    @Test
+    void testIsLikelyJsonWithEmptyBytes() {
+        assertFalse DefaultJwtParser.isLikelyJson(Bytes.EMPTY)
+    }
+
+    @Test
+    void testIsLikelyJsonWithWhitespaceString() {
+        assertFalse DefaultJwtParser.isLikelyJson(WHITESPACE_STR.getBytes(StandardCharsets.UTF_8))
+    }
+
+    @Test
+    void testIsLikelyJsonWithOnlyOpeningBracket() {
+        assertFalse DefaultJwtParser.isLikelyJson(' {... '.getBytes(StandardCharsets.UTF_8))
+    }
+
+    @Test
+    void testIsLikelyJsonWithOnlyClosingBracket() {
+        assertFalse DefaultJwtParser.isLikelyJson(' } '.getBytes(StandardCharsets.UTF_8))
+    }
+
+    @Test
+    void testIsLikelyJsonMinimalJsonObject() {
+        assertTrue DefaultJwtParser.isLikelyJson("{}".getBytes(StandardCharsets.UTF_8))
+    }
+
+    @Test
+    void testIsLikelyJsonWithLeadingAndTrailingWhitespace() {
+        // all whitespace chars as defined by Character.isWhitespace:
+        String claimsJson = WHITESPACE_STR + '{"sub":"joe"}' + WHITESPACE_STR
+        assertTrue DefaultJwtParser.isLikelyJson(claimsJson.getBytes(StandardCharsets.UTF_8))
+    }
+
+    @Test
+    void testIsLikelyJsonWithLeadingTextBeforeJsonObject() {
+        // all whitespace chars as defined by Character.isWhitespace:
+        String claimsJson = ' x {"sub":"joe"}'
+        assertFalse DefaultJwtParser.isLikelyJson(claimsJson.getBytes(StandardCharsets.UTF_8))
+    }
+
+    @Test
+    void testIsLikelyJsonWithTrailingTextAfterJsonObject() {
+        // all whitespace chars as defined by Character.isWhitespace:
+        String claimsJson = '{"sub":"joe"} x'
+        assertFalse DefaultJwtParser.isLikelyJson(claimsJson.getBytes(StandardCharsets.UTF_8))
     }
 }
