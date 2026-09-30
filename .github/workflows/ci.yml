@@ -7,6 +7,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 env:
   MVN_CMD: ./mvnw --no-transfer-progress -B
 
