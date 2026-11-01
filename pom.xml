@@ -133,7 +133,7 @@
         <powermock.version>2.0.9</powermock.version>
         <failsafe.plugin.version>3.1.2</failsafe.plugin.version>
         <surefire.plugin.version>3.1.2</surefire.plugin.version>
-        <clover.version>4.5.2</clover.version>
+        <clover.version>5.1.1</clover.version>
         <clover.db>${jjwt.root}/target/clover/clover.db</clover.db>
         <!-- Default surefire argLine for JDK 17 (the required build JDK).
              Individual jdk-N profiles override this for their toolchain executions. -->
